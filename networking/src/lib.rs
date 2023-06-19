@@ -3,17 +3,14 @@ pub mod proto {
 }
 
 pub mod statekeeping;
-use std::borrow::BorrowMut;
 use std::error::Error;
-use std::ops::{Deref, DerefMut};
-use std::pin::Pin;
 use std::sync::Arc;
 
 use proto::net_state_client::NetStateClient;
-use proto::net_state_server::{NetState, NetStateServer};
+use proto::net_state_server::NetState;
 use proto::{Command, State as ProtoState};
 use statekeeping::state::State;
-use tokio::runtime::Runtime;
+use tokio::sync::mpsc::error::SendError;
 use tokio::sync::{mpsc, watch, Mutex, RwLock};
 use tokio_stream::wrappers::ReceiverStream;
 use tonic::transport::Channel;
@@ -34,16 +31,21 @@ impl NetState for MyStateServer {
 
     async fn get_state(
         &self,
-        request: Request<()>,
+        _request: Request<()>,
     ) -> Result<Response<Self::GetStateStream>, Status> {
-        let (mut tx, rx) = mpsc::channel(4);
+        let (tx, rx) = mpsc::channel(4);
         let state = self.state.clone();
 
         tokio::spawn(async move {
-            while state.lock().await.changed().await.is_ok() {
+            'state_loop: while state.lock().await.changed().await.is_ok() {
                 let state_mutex = state.lock().await;
                 let state = state_mutex.borrow().clone();
-                tx.send(Ok(ProtoState::from(state))).await.unwrap();
+                match tx.send(Ok(ProtoState::from(state))).await {
+                    Err(_) => {
+                        break 'state_loop;
+                    }
+                    Ok(_) => {}
+                }
             }
         });
 
@@ -59,34 +61,42 @@ pub struct StateClient {
     /// The RPC client.
     client: NetStateClient<Channel>,
 
-    /// A channel to recieve commands from the server.
-    /// This should be created alongside with a sender, to be used in the program.
-    commands_rx: watch::Receiver<Command>,
-
     /// The current state of the simulation. Saved by the `start_stream` function.
     /// Behind a RwLock to avoid race conditions.
     /// Behind an Arc to allow async streams to access it.
-    state_lock: Arc<RwLock<State>>,
+    pub state_container: Arc<RwLock<Option<State>>>,
 }
 
 impl StateClient {
-    async fn start_stream(&mut self) -> Result<(), Box<dyn Error>> {
-        let state_container = self.state_lock.clone();
+    pub fn new(
+        client: NetStateClient<Channel>,
+        state_container: Arc<RwLock<Option<State>>>,
+    ) -> StateClient {
+        StateClient {
+            client,
+            state_container,
+        }
+    }
+
+    pub async fn start_stream(&mut self) -> Result<(), Box<dyn Error>> {
+        let state_container = Arc::clone(&self.state_container);
         let mut stream = self.client.get_state(Request::new(())).await?.into_inner();
 
         while let Some(feature) = stream.message().await? {
+            // Gets the state with write access. state_ref is a locked reference to the state.
             let mut state_ref = state_container.write().await;
-            let state = feature.try_into();
+
+            // Converts NetState to State
+            let state: Result<State, _> = feature.try_into();
             if let Ok(state) = state {
-                *state_ref = state;
+                *state_ref = Some(state);
             }
         }
 
         Ok(())
     }
 
-    fn get_state(&mut self) -> State {
-        let runtime = Runtime::new().unwrap();
-        runtime.block_on(self.state_lock.read()).clone()
+    pub async fn get_state(&mut self) -> Option<State> {
+        self.state_container.read().await.clone()
     }
 }
