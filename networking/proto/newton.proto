@@ -1,8 +1,10 @@
 syntax = "proto3";
 package newton;
 
-service StateServer {
-    rpc GetState (stream Command) returns (stream State) {}
+import "google/protobuf/empty.proto";
+
+service NetState {
+    rpc GetState (google.protobuf.Empty) returns (stream State) {}
 }
 
 message Command {
