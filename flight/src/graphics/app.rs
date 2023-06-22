@@ -1,22 +1,21 @@
 use networking::statekeeping::state::State;
-use macroquad::prelude::*;
+use opengl_graphics::GlGraphics;
+use piston::RenderArgs;
 
-pub fn render(state: &mut State) {
-    clear_background(BLACK);
-    for planet in &state.planets {
-        draw_circle(
-            planet.position[0] as f32,
-            planet.position[1] as f32,
-            planet.radius as f32,
-            WHITE,
-        );
-        // Print framerate
-        draw_text(
-            &format!("FPS: {}", get_fps()),
-            100.0,
-            100.0,
-            20.0,
-            WHITE,
-        );
+pub struct App {
+    pub gl: GlGraphics,
+    pub state: Option<State>,
+}
+
+impl App {
+    pub fn render(&mut self, args: &RenderArgs) {
+        use graphics::*;
+
+        const BLACK: [f32; 4] = [0., 0., 0., 0.];
+
+        self.gl.draw(args.viewport(), |c, gl| {
+            clear(BLACK, gl);
+        });
+
     }
 }
