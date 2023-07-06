@@ -1,52 +1,57 @@
-use std::sync::Arc;
+mod cli;
+mod networking;
 
-use crate::graphics::app::App;
-use glutin_window::GlutinWindow;
-use networking::{
-    proto::net_state_client::NetStateClient, statekeeping::state::State, StateClient,
+use std::{
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc, RwLock,
+    },
+    thread,
 };
-use opengl_graphics::{GlGraphics, OpenGL};
-use piston::{EventSettings, Events, RenderEvent, UpdateEvent, WindowSettings};
-use tokio::sync::RwLock;
 
-mod graphics;
+use common::data::state::State;
+use macroquad::prelude::*;
+use networking::client::{Client, Config};
 
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let state_container: Arc<RwLock<Option<State>>> = Arc::new(RwLock::new(None));
-    let rpc_client = NetStateClient::connect("http://[::1]:50051").await?;
-    let mut client = StateClient::new(rpc_client, state_container.clone());
-    let opengl = OpenGL::V3_2;
-    
-    let mut window: GlutinWindow = WindowSettings::new("Newton", [800, 500])
-    .graphics_api(opengl)
-    .build()
-    .unwrap();
+#[macroquad::main("Flight")]
+async fn main() {
+    env_logger::init();
 
-    let mut app = App {
-        gl: GlGraphics::new(opengl),
-        state: None,
+    let state_lock: Arc<RwLock<Option<State>>> = Arc::new(RwLock::new(None));
+
+    let quit_flag = Arc::new(AtomicBool::new(false));
+
+    let client_config = Config {
+        network_interface: "",
+        network_port: 5000,
     };
 
-    tokio::spawn(async move {
-        loop {
-            client.start_stream().await.unwrap_or_else(|e| {
-                println!("Error: {:?}\n Restarting...", e);
-            });
-        }
-    });
+    let client = Client::new(
+        client_config,
+        Arc::clone(&state_lock),
+        Arc::clone(&quit_flag),
+    );
 
-    let mut events = Events::new(EventSettings::new());
-    while let Some(e) = events.next(&mut window) {
-        if let Some(args) = e.render_args() {
-            app.render(&args);
-        }
-
-        if let Some(_args) = e.update_args() {
-            let state_read = state_container.read().await;
-            app.state = state_read.clone();
-        }
+    if client.is_none() {
+        return;
     }
 
-    Ok(())
+    let client = client.unwrap();
+
+    thread::spawn(move || {
+        log::info!("Network thread starting...");
+
+        client.run();
+    });
+
+    loop {
+        clear_background(BLACK);
+
+        if quit_flag.load(Ordering::SeqCst) {
+            log::trace!("Quitting from graphics thread...");
+            break;
+        }
+
+        next_frame().await;
+    }
 }

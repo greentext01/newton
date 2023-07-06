@@ -1,0 +1,105 @@
+State(
+    ships: [],
+    planets: [
+        Planet(
+            object: Object(
+                mass: 500000000000000.0,
+                position: Array(
+                    v: 1,
+                    dim: (2),
+                    data: [
+                        100.0,
+                        100.0,
+                    ],
+                ),
+                velocity: Array(
+                    v: 1,
+                    dim: (2),
+                    data: [
+                        20.0,
+                        0.0,
+                    ],
+                ),
+                acceleration: Array(
+                    v: 1,
+                    dim: (2),
+                    data: [
+                        0.0,
+                        0.0,
+                    ],
+                ),
+                heading: 0.0,
+                spin: 0.0,
+            ),
+            radius: 10.0,
+        ),
+        Planet(
+            object: Object(
+                mass: 500000000000000.0,
+                position: Array(
+                    v: 1,
+                    dim: (2),
+                    data: [
+                        100.0,
+                        200.0,
+                    ],
+                ),
+                velocity: Array(
+                    v: 1,
+                    dim: (2),
+                    data: [
+                        20.0,
+                        0.0,
+                    ],
+                ),
+                acceleration: Array(
+                    v: 1,
+                    dim: (2),
+                    data: [
+                        0.0,
+                        0.0,
+                    ],
+                ),
+                heading: 0.0,
+                spin: 0.0,
+            ),
+            radius: 10.0,
+        ),
+        Planet(
+            object: Object(
+                mass: 500000000000000.0,
+                position: Array(
+                    v: 1,
+                    dim: (2),
+                    data: [
+                        300.0,
+                        100.0,
+                    ],
+                ),
+                velocity: Array(
+                    v: 1,
+                    dim: (2),
+                    data: [
+                        -20.0,
+                        0.0,
+                    ],
+                ),
+                acceleration: Array(
+                    v: 1,
+                    dim: (2),
+                    data: [
+                        0.0,
+                        0.0,
+                    ],
+                ),
+                heading: 0.0,
+                spin: 0.0,
+            ),
+            radius: 10.0,
+        ),
+    ],
+    inputs: Inputs(
+        navmode: MAN,
+        throttle: 0.0,
+    ),
+)

@@ -1,2 +1,1 @@
-# Dependencies
-Protoc 23.2
+# Newton
