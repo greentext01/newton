@@ -1,10 +1,10 @@
 mod cli;
-mod networking;
 mod graphics;
+mod networking;
 
 use std::{
     sync::{
-        atomic::{AtomicBool, Ordering},
+        mpsc::channel,
         Arc, RwLock,
     },
     thread,
@@ -14,7 +14,7 @@ use common::data::state::State;
 use env_logger::Env;
 use graphics::icon::*;
 use macroquad::{miniquad::conf::Icon, prelude::*};
-use networking::client::{Client, Config};
+use networking::client::{Client, Config, NetThreadEvent};
 
 fn window_conf() -> Conf {
     Conf {
@@ -40,18 +40,14 @@ async fn main() {
 
     let state_lock: Arc<RwLock<Option<State>>> = Arc::new(RwLock::new(None));
 
-    let quit_flag = Arc::new(AtomicBool::new(false));
-
     let client_config = Config {
         network_interface: "127.0.0.1",
         network_port: 5000,
     };
 
-    let client = Client::new(
-        client_config,
-        Arc::clone(&state_lock),
-        Arc::clone(&quit_flag),
-    );
+    let (events_tx, events_rx) = channel();
+
+    let client = Client::new(client_config, Arc::clone(&state_lock), events_tx);
 
     if client.is_none() {
         return;
@@ -65,25 +61,56 @@ async fn main() {
         client.run();
     });
 
+    let mut connected = false;
+
+    let splash_texture = load_texture("assets/splash.png").await.unwrap();
+
     loop {
-        if quit_flag.load(Ordering::SeqCst) {
-            log::trace!("Quitting from graphics thread...");
-            break;
+        match events_rx.try_recv() {
+            Err(..) => {}
+            Ok(event) => match event {
+                NetThreadEvent::Quit => {
+                    log::trace!("Quitting from graphics thread...");
+                    break;
+                }
+                NetThreadEvent::Connected => {
+                    log::info!("Connected to server!");
+                    connected = true;
+                }
+                NetThreadEvent::Disconnected => {
+                    log::info!("Disconnected from server!");
+                    connected = false;
+                }
+            },
         }
 
+        
         let state_guard = state_lock.read().unwrap();
         let state = state_guard.clone();
         drop(state_guard);
 
+        if !connected {
+            // Draw splash screen
+            draw_texture(
+                splash_texture,
+                screen_width() / 2.0 - splash_texture.width() / 2.0,
+                screen_height() / 2.0 - splash_texture.height() / 2.0,
+                WHITE,
+            );
+
+            next_frame().await;
+            continue;
+        }
+        
         if state.is_none() {
             next_frame().await;
             continue;
         }
-
+        
         let state = state.unwrap();
-
+        
         clear_background(BLACK);
-
+        
         for planet in state.planets.iter() {
             draw_circle(
                 planet.object.position[0] as f32,

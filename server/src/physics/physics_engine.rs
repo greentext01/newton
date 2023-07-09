@@ -103,23 +103,21 @@ impl PhysicsEngine {
 
     /// Gets planets' acceleration, and integrates to get each planets' position
     fn step_planets(&mut self, objects: &mut Objects, dt: f64) {
-        // for (i, planet) in state.planets.iter_mut().enumerate() {
-        //     let acc = &self.planet_accelerations.slice(s![i, ..]);
-        //     planet.velocity += &(acc * dt / 2.);
-        //     planet.position += &(&planet.velocity * dt);
-        // }
-
-        // for (i, planet) in state.planets.iter_mut().enumerate() {
-        //     let acc = &self.planet_accelerations.slice(s![i, ..]);
-        //     planet.velocity += &(acc * dt / 2.);
-        // }
-        let accelerations = self.get_planet_accelerations(objects);
-        let (_, planets) = objects;
-
-        for (i, planet) in planets.iter_mut().enumerate() {
-            let acc = &accelerations.slice(s![i, ..]);
-            planet.object.velocity += &(acc * dt);
+        for planet in objects.1.iter_mut() {
+            let acc = &planet.object.acceleration;
+            planet.object.velocity += &(acc * dt / 2.);
             planet.object.position += &(&planet.object.velocity * dt);
+        }
+        
+        let accelerations = self.get_planet_accelerations(objects);
+
+        for (i, ship) in objects.1.iter_mut().enumerate() {
+            ship.object.acceleration = accelerations.slice(s![i, ..]).to_owned();
+        }
+        
+        for planet in objects.1.iter_mut() {
+            let acc = &planet.object.acceleration;
+            planet.object.velocity += &(acc * dt / 2.);
         }
     }
 
