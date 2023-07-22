@@ -9,6 +9,8 @@ use message_io::{
     node::{self, NodeEvent, NodeHandler, NodeListener},
 };
 
+use crate::graphics::textures::Textures;
+
 /// NetThreadEvents are events that are sent to the graphics thread.
 /// These are sent by a mpsc channel.
 pub enum NetThreadEvent {
@@ -40,6 +42,7 @@ pub struct Client {
     node: NodeHandler<Signal>,
     listener: NodeListener<Signal>,
     server_id: Endpoint,
+    config: Config,
     local_addr: SocketAddr,
     state_lock: Arc<RwLock<Option<State>>>,
     events_tx: Sender<NetThreadEvent>,
@@ -55,12 +58,37 @@ impl Client {
         events_tx: Sender<NetThreadEvent>,
     ) -> Option<Client> {
         let (node, listener) = node::split();
+
+        let (server_id, local_addr) = Client::connect(&node, &config)?;
+
+        log::info!(
+            "Client is listening on {}:{}",
+            config.network_interface,
+            config.network_port
+        );
+
+        if !std::path::Path::new(&Textures::get_texture_path("flight", "ui/coconut.jpg")).exists() {
+            panic!("Error: texture not found!");
+        }
+
+        Some(Client {
+            node,
+            listener,
+            server_id,
+            local_addr,
+            state_lock,
+            config,
+            events_tx,
+        })
+    }
+
+    fn connect(node: &NodeHandler<Signal>, config: &Config) -> Option<(Endpoint, SocketAddr)> {
         let connection_result = node.network().connect(
             Transport::FramedTcp,
             (config.network_interface, config.network_port),
         );
 
-        let (server_id, local_addr) = match connection_result {
+        match connection_result {
             Err(_) => {
                 log::error!(
                     "Failed to listen on {}:{}",
@@ -70,23 +98,8 @@ impl Client {
                 return None;
             }
 
-            Ok(res) => res,
+            Ok(res) => return Some(res),
         };
-
-        log::info!(
-            "Client is listening on {}:{}",
-            config.network_interface,
-            config.network_port
-        );
-
-        Some(Client {
-            node,
-            listener,
-            server_id,
-            local_addr,
-            state_lock,
-            events_tx,
-        })
     }
 
     pub fn run(self) {
@@ -110,12 +123,10 @@ impl Client {
                             self.local_addr.port()
                         );
 
-                        if self.events_tx.send(NetThreadEvent::Connected).is_err() {
-                            log::error!("Failed to send connected event to graphics thread.\nThe receiver was somehow dropped.");
-                        }
+                        send_or_log_err(&self.events_tx, NetThreadEvent::Connected);
                     } else {
-                        log::error!("Cannot connect to server at {}", self.server_id.addr());
-                        self.node.signals().send_with_priority(Signal::Quit);
+                        log::error!("Cannot connect to server at {}. Retrying...", self.server_id.addr());
+                        Client::connect(&self.node, &self.config);
                     }
                 }
                 NetEvent::Accepted(_, _) => {}
@@ -123,6 +134,7 @@ impl Client {
                     let message: FromServerMessage = bincode::deserialize(&message_bin).unwrap();
                     match message {
                         FromServerMessage::Update(state) => {
+                            log::trace!("Received state update");
                             log::trace!("Received state update");
                             let mut state_guard = self.state_lock.write().unwrap();
                             *state_guard = Some(state);
@@ -132,9 +144,7 @@ impl Client {
                 NetEvent::Disconnected(_) => {
                     log::info!("Disconnected from server. Stopping...");
 
-                    if self.events_tx.send(NetThreadEvent::Disconnected).is_err() {
-                        log::error!("Failed to send disconnected event to graphics thread.\nThe receiver was somehow dropped.");
-                    }
+                    send_or_log_err(&self.events_tx, NetThreadEvent::Disconnected);
 
                     self.node.signals().send_with_priority(Signal::Quit);
                 }
@@ -145,11 +155,15 @@ impl Client {
                     self.node.stop();
 
                     log::trace!("Setting quit flag...");
-                    if self.events_tx.send(NetThreadEvent::Quit).is_err() {
-                        log::error!("Failed to send quit event to graphics thread.\nThe receiver was somehow dropped.");
-                    }
+                    send_or_log_err(&self.events_tx, NetThreadEvent::Quit);
                 }
             },
         });
+    }
+}
+
+fn send_or_log_err(events_tx: &Sender<NetThreadEvent>, event: NetThreadEvent) {
+    if events_tx.send(event).is_err() {
+        log::error!("Failed to send event to graphics thread.\nThe receiver was somehow dropped.");
     }
 }

@@ -5,12 +5,29 @@ use serde::{Deserialize, Serialize};
 /// Contains data for physics calculations.
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Object {
+    /// Mass 
     pub mass: f64,
+    
+    /// Position in meters
     pub position: Array1<f64>,
+    
+    /// Velocity in meters per second
     pub velocity: Array1<f64>,
+    
+    /// Acceleration in meters per second squared
     pub acceleration: Array1<f64>,
+
+    /// Heading in radians
     pub heading: f64,
+    
+    /// Spin in radians per second
     pub spin: f64,
+
+    /// A unique identifier for the object.
+    pub id: i32,
+
+    /// The name of the texture for the object to use
+    pub texture: String,
 }
 
 pub type Objects = (Vec<Ship>, Vec<Planet>);
@@ -46,4 +63,3 @@ pub struct Ship {
     pub object: Object,
     pub ship_type: ShipType,
 }
-

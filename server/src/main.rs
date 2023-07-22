@@ -56,7 +56,7 @@ fn main() {
         );
     });
 
-    let server = Server::new(server_config, objects_rwlock, inputs_rwlock);
+    let server = Server::new(server_config, objects_rwlock, inputs_rwlock, &arguments);
     if server.is_none() {
         return;
     }

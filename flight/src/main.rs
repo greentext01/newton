@@ -1,36 +1,37 @@
 mod cli;
+mod data;
 mod graphics;
 mod networking;
 
 use std::{
-    sync::{
-        mpsc::channel,
-        Arc, RwLock,
-    },
+    sync::{mpsc::channel, Arc, RwLock},
     thread,
 };
 
 use common::data::state::State;
+use data::client_state::ClientState;
 use env_logger::Env;
-use graphics::icon::*;
 use macroquad::{miniquad::conf::Icon, prelude::*};
 use networking::client::{Client, Config, NetThreadEvent};
+use graphics::{icon::*, textures::Textures, renderer::Renderer};
 
-fn window_conf() -> Conf {
+fn config() -> Conf {
     Conf {
         window_title: "Flight".to_owned(),
-        window_width: 800,
-        window_height: 600,
+        window_width: 1280,
+        window_height: 720,
+        fullscreen: false,
+        window_resizable: true,
         icon: Some(Icon {
-            small: ICON_SMALL,
-            medium: ICON_MEDIUM,
             big: ICON_BIG,
+            medium: ICON_MEDIUM,
+            small: ICON_SMALL,
         }),
         ..Default::default()
     }
 }
 
-#[macroquad::main(window_conf)]
+#[macroquad::main(config)]
 async fn main() {
     let env = Env::default()
         .filter_or("FLIGHT_LOG_LEVEL", "info")
@@ -46,6 +47,8 @@ async fn main() {
     };
 
     let (events_tx, events_rx) = channel();
+
+    let textures = Textures::new().await;
 
     let client = Client::new(client_config, Arc::clone(&state_lock), events_tx);
 
@@ -63,62 +66,53 @@ async fn main() {
 
     let mut connected = false;
 
-    let splash_texture = load_texture("assets/splash.png").await.unwrap();
+    let client_state = ClientState { center: 1 };
 
-    loop {
-        match events_rx.try_recv() {
-            Err(..) => {}
-            Ok(event) => match event {
-                NetThreadEvent::Quit => {
-                    log::trace!("Quitting from graphics thread...");
-                    break;
-                }
-                NetThreadEvent::Connected => {
-                    log::info!("Connected to server!");
-                    connected = true;
-                }
-                NetThreadEvent::Disconnected => {
-                    log::info!("Disconnected from server!");
-                    connected = false;
-                }
-            },
+    let mut renderer = Renderer::new(&client_state, &textures);
+
+    'outer: loop {
+        'inner: loop {
+            match events_rx.try_recv() {
+                Err(..) => break 'inner,
+                Ok(event) => match event {
+                    NetThreadEvent::Quit => {
+                        log::trace!("Quitting from graphics thread...");
+                        break 'outer;
+                    }
+                    NetThreadEvent::Connected => {
+                        log::info!("Connected to server");
+                        connected = true;
+                    }
+                    NetThreadEvent::Disconnected => {
+                        log::info!("Disconnected from server");
+                        connected = false;
+                    }
+                },
+            }
+        }
+        
+        if !connected {
+            clear_background(BLACK);
+            
+            // Draw splash screen
+            renderer.draw_splash(textures.splash);
+
+            next_frame().await;
+            continue;
         }
 
-        
         let state_guard = state_lock.read().unwrap();
         let state = state_guard.clone();
         drop(state_guard);
 
-        if !connected {
-            // Draw splash screen
-            draw_texture(
-                splash_texture,
-                screen_width() / 2.0 - splash_texture.width() / 2.0,
-                screen_height() / 2.0 - splash_texture.height() / 2.0,
-                WHITE,
-            );
-
-            next_frame().await;
-            continue;
-        }
-        
         if state.is_none() {
             next_frame().await;
             continue;
         }
-        
+
         let state = state.unwrap();
-        
-        clear_background(BLACK);
-        
-        for planet in state.planets.iter() {
-            draw_circle(
-                planet.object.position[0] as f32,
-                planet.object.position[1] as f32,
-                planet.radius as f32,
-                WHITE,
-            );
-        }
+
+        renderer.render(&state);
 
         next_frame().await;
     }

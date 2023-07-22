@@ -395,6 +395,7 @@ dependencies = [
  "log",
  "macroquad",
  "message-io",
+ "ndarray",
  "serde",
 ]
 
@@ -993,7 +994,6 @@ dependencies = [
  "common",
  "ctrlc",
  "env_logger 0.9.3",
- "lazy_static",
  "log",
  "message-io",
  "ndarray",

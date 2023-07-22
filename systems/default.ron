@@ -1,8 +1,9 @@
 State(
-    ships: [],
-    planets: [
-        Planet(
+    ships: [
+        Ship(
             object: Object(
+                id: 1,
+                texture: "earth",
                 mass: 500000000000000.0,
                 position: Array(
                     v: 1,
@@ -31,24 +32,27 @@ State(
                 heading: 0.0,
                 spin: 0.0,
             ),
-            radius: 10.0,
-        ),
+        )
+    ],
+    planets: [
         Planet(
             object: Object(
+                id: 1,
+                texture: "earth",
                 mass: 500000000000000.0,
                 position: Array(
                     v: 1,
                     dim: (2),
                     data: [
-                        100.0,
-                        200.0,
+                        0.0,
+                        0.0,
                     ],
                 ),
                 velocity: Array(
                     v: 1,
                     dim: (2),
                     data: [
-                        10.0,
+                        0.0,
                         0.0,
                     ],
                 ),
@@ -63,7 +67,7 @@ State(
                 heading: 0.0,
                 spin: 0.0,
             ),
-            radius: 10.0,
+            radius: 6371.0,
         ),
     ],
     inputs: Inputs(

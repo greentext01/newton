@@ -9,7 +9,6 @@ use common::data::state::State;
 use common::messages::encoding::BincodeEncoder;
 use common::messages::from_client::FromClientMessage;
 use common::messages::from_server::FromServerMessage;
-use lazy_static::lazy_static;
 use message_io::network::{Endpoint, NetEvent};
 use message_io::node::{NodeEvent, NodeHandler};
 use message_io::{
@@ -17,9 +16,7 @@ use message_io::{
     node::{self, NodeListener},
 };
 
-lazy_static! {
-    static ref UPDATE_DURATION: Duration = Duration::from_secs_f32(1.0 / 30.0);
-}
+use crate::cli::arg_parser::Arguments;
 
 #[derive(Debug)]
 enum Signal {
@@ -34,6 +31,7 @@ pub struct Server {
     listener: Option<NodeListener<Signal>>,
     subscriptions: HashSet<Endpoint>,
     node: NodeHandler<Signal>,
+    update_duration: Duration,
 }
 
 pub struct Config {
@@ -46,6 +44,7 @@ impl Server {
         config: Config,
         objects_rwlock: Arc<RwLock<Objects>>,
         input_rwlock: Arc<RwLock<Inputs>>,
+        args: &Arguments,
     ) -> Option<Server> {
         let (node, listener) = node::split();
         let node_closer = node.clone();
@@ -87,6 +86,7 @@ impl Server {
             inputs_rwlock: input_rwlock,
             listener: Some(listener),
             subscriptions: HashSet::new(),
+            update_duration: Duration::from_secs_f32(1.0 / args.updates_per_second as f32),
             node,
         })
     }
@@ -126,7 +126,7 @@ impl Server {
                     self.send_to_all_clients(subscriptions, message);
                     self.node
                         .signals()
-                        .send_with_timer(Signal::Update, *UPDATE_DURATION);
+                        .send_with_timer(Signal::Update, self.update_duration);
                 }
             },
             NodeEvent::Network(network) => match network {
